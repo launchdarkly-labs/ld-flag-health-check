@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaunchDarkly Flag Health Check</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚩 LaunchDarkly Flag Health Check</h1>
+            <p>Verify your feature flags are healthy and properly configured</p>
+        </header>
+
+        <div class="config-section">
+            <h2>Configuration</h2>
+            <form id="healthCheckForm">
+                <div class="form-group">
+                    <label for="apiKey">
+                        LaunchDarkly API Key
+                        <span class="recommendation">(READ ONLY recommended)</span>
+                    </label>
+                    <input 
+                        type="password" 
+                        id="apiKey" 
+                        placeholder="api-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        required
+                    >
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="projectKey">Project Key (Searchable)</label>
+                        <input 
+                            type="text" 
+                            id="projectKey" 
+                            list="projectsList"
+                            placeholder="Enter API key first..."
+                            required
+                            disabled
+                            autocomplete="off"
+                        >
+                        <datalist id="projectsList"></datalist>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="environment">Environment (Searchable)</label>
+                        <input 
+                            type="text" 
+                            id="environment" 
+                            list="environmentsList"
+                            placeholder="Select project first..."
+                            required
+                            disabled
+                            autocomplete="off"
+                        >
+                        <datalist id="environmentsList"></datalist>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="checkBtn">
+                    Run Health Check
+                </button>
+            </form>
+        </div>
+
+        <div id="loadingSection" class="loading-section" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing flags...</p>
+        </div>
+
+        <div id="errorSection" class="error-section" style="display: none;">
+            <div class="error-message">
+                <span class="error-icon">⚠️</span>
+                <div>
+                    <strong>Error</strong>
+                    <p id="errorMessage"></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsSection" class="results-section" style="display: none;">
+            <div class="results-header">
+                <h2>Health Check Results</h2>
+                <p style="color: #666; margin-bottom: 15px;">💡 Click on summary boxes to filter results • Click on flag cards to expand/collapse details</p>
+                <div class="summary" id="summary"></div>
+            </div>
+            <div id="flagsList" class="flags-list"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
