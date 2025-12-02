@@ -21,7 +21,7 @@ async function encryptApiKey(apiKey: string): Promise<string> {
     }
     
     // Convert to base64 for storage
-    return btoa(String.fromCharCode.apply(null, Array.from(encrypted)));
+    return btoa(String.fromCharCode(...Array.from(encrypted)));
   } catch (error) {
     console.error('Error encrypting API key:', error);
     throw error;
