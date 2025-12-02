@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import styles from './page.module.css';
 import Tooltip from './components/Tooltip';
 import { loadApiKey, saveApiKey, shouldRememberApiKey, clearApiKey } from './utils/apiKeyStorage';
@@ -60,6 +60,12 @@ interface ProgressState {
   estimatedTimeRemaining?: number;
 }
 
+// Validate API key format
+const isValidApiKey = (key: string) => {
+  const apiKeyPattern = /^api-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return apiKeyPattern.test(key);
+};
+
 export default function Home() {
   const [apiKey, setApiKey] = useState('');
   const [projectKey, setProjectKey] = useState('');
@@ -94,41 +100,8 @@ export default function Home() {
     setIsClient(true);
   }, []);
 
-  // Load API key from storage on mount (only on client)
-  useEffect(() => {
-    if (!isClient) return;
-    
-    const loadStoredApiKey = async () => {
-      try {
-        const stored = shouldRememberApiKey();
-        setRememberApiKey(stored);
-        
-        if (stored) {
-          const key = await loadApiKey();
-          if (key) {
-            setApiKey(key);
-            // Auto-fetch projects if API key is loaded
-            setTimeout(() => {
-              handleApiKeyBlur(key);
-            }, 100);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading stored API key:', error);
-      }
-    };
-    
-    loadStoredApiKey();
-  }, [isClient]);
-
-  // Validate API key format
-  const isValidApiKey = (key: string) => {
-    const apiKeyPattern = /^api-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return apiKeyPattern.test(key);
-  };
-
   // Fetch projects when API key is entered
-  const handleApiKeyBlur = async (key?: string) => {
+  const handleApiKeyBlur = useCallback(async (key?: string) => {
     const trimmedKey = (key || apiKey).trim();
     if (!trimmedKey) {
       return;
@@ -211,7 +184,34 @@ export default function Home() {
     } finally {
       setLoadingProjects(false);
     }
-  };
+  }, [apiKey, rememberApiKey]);
+
+  // Load API key from storage on mount (only on client)
+  useEffect(() => {
+    if (!isClient) return;
+    
+    const loadStoredApiKey = async () => {
+      try {
+        const stored = shouldRememberApiKey();
+        setRememberApiKey(stored);
+        
+        if (stored) {
+          const key = await loadApiKey();
+          if (key) {
+            setApiKey(key);
+            // Auto-fetch projects if API key is loaded
+            setTimeout(() => {
+              handleApiKeyBlur(key);
+            }, 100);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading stored API key:', error);
+      }
+    };
+    
+    loadStoredApiKey();
+  }, [isClient, handleApiKeyBlur]);
 
   // Handle remember API key checkbox change
   const handleRememberChange = async (checked: boolean) => {
