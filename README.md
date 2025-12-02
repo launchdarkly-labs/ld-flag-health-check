@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-A browser-based tool for checking LaunchDarkly feature flag health by comparing fallback values with environment default rules.
+A Next.js fullstack application for checking LaunchDarkly feature flag health by comparing fallback values with environment default rules.
 
 ## Overview
 
@@ -21,27 +21,53 @@ The Flag Health Check tool helps you identify potential mismatches between your 
 
 ### Prerequisites
 
+- Node.js 18+ and npm/yarn/pnpm
 - A LaunchDarkly account
 - A LaunchDarkly API key (READ ONLY recommended)
-- A modern web browser
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd ld-flag-health-check
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   # or
+   yarn install
+   # or
+   pnpm install
+   ```
+
+3. **Run the development server**
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   # or
+   pnpm dev
+   ```
+
+4. **Open your browser**
+   
+   Navigate to [http://localhost:3000](http://localhost:3000)
 
 ### Usage
 
-1. **Open the Tool**
-   
-   Open `index.html` in your web browser, or host it on a web server.
-
-2. **Enter Configuration**
+1. **Enter Configuration**
    
    - **API Key**: Enter your LaunchDarkly API key (read-only access is recommended for security)
    - **Project Key**: Select or search for your project (populated automatically after entering API key)
    - **Environment**: Select the environment to check (e.g., production, staging)
 
-3. **Run Health Check**
+2. **Run Health Check**
    
    Click "Run Health Check" to analyze your flags.
 
-4. **Review Results**
+3. **Review Results**
    
    - View summary statistics (launched, active, inactive flags, and mismatches)
    - Click on summary boxes to filter results
@@ -79,42 +105,42 @@ Keep your fallback values synchronized with your LaunchDarkly environment defaul
 ## Limitations
 
 - Cannot compare flags with dynamic targeting strategies (percentage rollouts, experiments, guarded rollouts)
-- Requires browser access to LaunchDarkly API (CORS enabled)
 - Only compares static fallback values with static default rules
 
-## Installation
+## Deployment
 
-### Option 1: Direct Use
-
-Simply open `index.html` in your browser.
-
-### Option 2: Local Web Server
+### Build for Production
 
 ```bash
-# Using Python 3
-python -m http.server 8000
-
-# Using Node.js (with http-server)
-npx http-server -p 8000
-
-# Then open http://localhost:8000
+npm run build
+npm start
 ```
 
-### Option 3: Deploy to Static Hosting
+### Deploy to Vercel
 
-Deploy to any static hosting service:
-- GitHub Pages
+The easiest way to deploy is using [Vercel](https://vercel.com):
+
+```bash
+npm i -g vercel
+vercel
+```
+
+### Deploy to Other Platforms
+
+This Next.js app can be deployed to any platform that supports Node.js:
+- Vercel (recommended)
 - Netlify
-- Vercel
-- AWS S3
-- Any web server
+- AWS Amplify
+- Railway
+- Render
+- Any Node.js hosting service
 
 ## Security Notes
 
 - **API Key Security**: Use read-only API keys when possible
-- **Browser-Based**: All API calls are made directly from your browser
-- **No Backend**: No data is stored or transmitted to any third-party servers
-- **Local Storage**: API keys are not persisted (you must re-enter them each session)
+- **Server-Side API Calls**: All LaunchDarkly API calls are made from the Next.js server to avoid CORS issues
+- **No Data Storage**: No data is stored or transmitted to any third-party servers
+- **Session-Based**: API keys are not persisted (you must re-enter them each session)
 
 ## Contributing
 
