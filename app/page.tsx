@@ -86,6 +86,8 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'status' | 'lastEvaluated' | 'mismatch'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ level: 'good' | 'warning' | 'danger'; message: string } | null>(null);
+  const [partialResults, setPartialResults] = useState(false);
 
   // Mark as client-side after hydration
   useEffect(() => {
@@ -170,17 +172,37 @@ export default function Home() {
       }
       
       const data = await response.json();
+      
+      // Update progress with actual counts if available
+      if (data.totalCount && data.loadedCount !== undefined) {
+        setProgress({
+          current: data.loadedCount,
+          total: data.totalCount,
+          operation: `Loading projects... (${data.loadedCount}/${data.totalCount})`
+        });
+      }
+      
       setProjects(data.projects || []);
+      
+      // Update rate limit info if available
+      if (data.rateLimitInfo) {
+        const { getRateLimitStatus } = await import('./utils/rateLimitStatus');
+        const status = getRateLimitStatus(data.rateLimitInfo);
+        setRateLimitInfo(status);
+      }
+      
+      // Show completion message
+      const totalCount = data.totalCount || data.projects?.length || 0;
       setProgress({
-        current: 1,
-        total: 1,
-        operation: 'Projects loaded'
+        current: totalCount,
+        total: totalCount,
+        operation: `Loaded ${totalCount} project${totalCount !== 1 ? 's' : ''}`
       });
       
       // Clear progress after a short delay
       setTimeout(() => {
         setProgress(null);
-      }, 500);
+      }, 1000);
     } catch (err: any) {
       console.error('Error fetching projects:', err);
       setError(err.message || 'Failed to fetch projects');
@@ -271,6 +293,13 @@ export default function Home() {
       const statusData = await statusResponse.json();
       const flags = statusData.flags || [];
       
+      // Update rate limit info if available
+      if (statusData.rateLimitInfo) {
+        const { getRateLimitStatus } = await import('./utils/rateLimitStatus');
+        const status = getRateLimitStatus(statusData.rateLimitInfo);
+        setRateLimitInfo(status);
+      }
+      
       if (flags.length === 0) {
         throw new Error('No flags found for this project and environment');
       }
@@ -311,6 +340,22 @@ export default function Home() {
       const detailsData = await detailsResponse.json();
       const flagDetails = detailsData.flagDetails || [];
       
+      // Update rate limit info if available
+      if (detailsData.rateLimitInfo) {
+        const { getRateLimitStatus } = await import('./utils/rateLimitStatus');
+        const status = getRateLimitStatus(detailsData.rateLimitInfo);
+        setRateLimitInfo(status);
+      }
+      
+      // Check for partial results
+      if (detailsData.stats) {
+        const { total, successful, errors } = detailsData.stats;
+        if (errors > 0) {
+          setPartialResults(true);
+          setError(`Warning: ${errors} out of ${total} flags failed to load. Showing ${successful} successful results.`);
+        }
+      }
+      
       // Step 3: Analyzing results
       setProgress({
         current: flags.length,
@@ -321,13 +366,19 @@ export default function Home() {
       // Small delay to show the analyzing step
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Calculate summary and set results
+      // Calculate summary and set results (even if partial)
       calculateSummary(flags, flagDetails, environment);
       setResults(flagDetails);
       
     } catch (err: any) {
       console.error('Health check error:', err);
-      setError(err.message || 'An error occurred during health check');
+      // If we have partial results, show them with a warning
+      if (results.length > 0) {
+        setPartialResults(true);
+        setError(`Some flags failed to load: ${err.message || 'An error occurred during health check'}. Showing partial results.`);
+      } else {
+        setError(err.message || 'An error occurred during health check');
+      }
     } finally {
       setLoading(false);
       setProgress(null);
@@ -737,12 +788,21 @@ export default function Home() {
         </div>
       )}
 
+      {rateLimitInfo && (
+        <div className={`${styles.rateLimitStatus} ${styles[`rateLimit${rateLimitInfo.level.charAt(0).toUpperCase() + rateLimitInfo.level.slice(1)}`]}`}>
+          <span className={styles.rateLimitIcon}>
+            {rateLimitInfo.level === 'danger' ? '🚨' : rateLimitInfo.level === 'warning' ? '⚠️' : '✅'}
+          </span>
+          <span>{rateLimitInfo.message}</span>
+        </div>
+      )}
+
       {error && (
-        <div className={styles.errorSection}>
+        <div className={`${styles.errorSection} ${partialResults ? styles.warningSection : ''}`}>
           <div className={styles.errorMessage}>
-            <span className={styles.errorIcon}>⚠️</span>
+            <span className={styles.errorIcon}>{partialResults ? '⚠️' : '⚠️'}</span>
             <div>
-              <strong className={styles.errorMessageTitle}>Error</strong>
+              <strong className={styles.errorMessageTitle}>{partialResults ? 'Warning' : 'Error'}</strong>
               <p className={styles.errorMessageText}>{error}</p>
             </div>
           </div>

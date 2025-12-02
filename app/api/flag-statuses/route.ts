@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimiter } from '@/app/utils/rateLimiter';
+import { fetchWithRetry, getErrorMessage } from '@/app/utils/retry';
 
 const LD_API_BASE = 'https://app.launchdarkly.com/api/v2';
 
@@ -23,29 +25,47 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Wait if rate limit is low
+    await rateLimiter.waitIfNeeded();
+    
     const url = `${LD_API_BASE}/flag-statuses/${projectKey}/${environment}`;
     
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       headers: {
         'Authorization': apiKey,
         'Content-Type': 'application/json'
       }
+    }, {
+      maxRetries: 3,
+      initialDelay: 1000,
+      retryableStatuses: [429, 500, 502, 503, 504]
     });
     
+    // Update rate limit info from headers
+    rateLimiter.updateFromHeaders(response.headers);
+    
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || 'Failed to fetch flag statuses');
+      const errorData = await response.json().catch(() => ({}));
+      const error = new Error(getErrorMessage({ response }, 'fetching flag statuses'));
+      (error as any).response = response;
+      throw error;
     }
     
     const data = await response.json();
     const flags = data.items || [];
+    const rateLimitInfo = rateLimiter.getRateLimitInfo();
     
-    return NextResponse.json({ flags });
+    return NextResponse.json({ 
+      flags,
+      rateLimitInfo 
+    });
   } catch (error: any) {
     console.error('Error fetching flag statuses:', error);
+    const errorMessage = getErrorMessage(error, 'fetching flag statuses');
+    const status = error.response?.status || (error.response instanceof Response ? error.response.status : 500);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch flag statuses' },
-      { status: 500 }
+      { error: errorMessage },
+      { status }
     );
   }
 }

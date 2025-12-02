@@ -732,3 +732,49 @@
     font-size: 0.9em;
 }
 
+/* Rate Limit Status */
+.rateLimitStatus {
+    background: white;
+    padding: var(--ld-space-3) var(--ld-space-5);
+    border-radius: var(--ld-radius-md);
+    box-shadow: var(--ld-shadow-sm);
+    margin-bottom: var(--ld-space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--ld-space-3);
+    border: 1.5px solid var(--ld-gray-200);
+    font-size: 0.875em;
+    flex-wrap: wrap;
+}
+
+.rateLimitGood {
+    border-color: var(--ld-success);
+    background: var(--ld-success-bg);
+}
+
+.rateLimitWarning {
+    border-color: var(--ld-warning);
+    background: var(--ld-warning-bg);
+}
+
+.rateLimitDanger {
+    border-color: var(--ld-error);
+    background: var(--ld-error-bg);
+    animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+}
+
+.rateLimitIcon {
+    font-size: 1.2em;
+    flex-shrink: 0;
+}
+
+.warningSection {
+    border-left-color: var(--ld-warning) !important;
+    background: var(--ld-warning-bg) !important;
+}
+
