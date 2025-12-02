@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching projects:', error);
     const errorMessage = getErrorMessage(error, 'fetching projects');
-    const status = error.response?.status || (error.response instanceof Response ? error.response.status : 500);
+    const status = error.response?.status || 500;
     return NextResponse.json(
       { error: errorMessage },
       { status }
