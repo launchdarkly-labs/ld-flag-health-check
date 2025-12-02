@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import styles from './page.module.css';
 import Tooltip from './components/Tooltip';
+import { loadApiKey, saveApiKey, shouldRememberApiKey, clearApiKey } from './utils/apiKeyStorage';
+import { exportToCSV, exportToJSON, exportToPDF, ExportableFlag } from './utils/export';
 
 interface Project {
   key: string;
@@ -51,6 +53,13 @@ interface FlagDetailResult {
   error?: string;
 }
 
+interface ProgressState {
+  current: number;
+  total: number;
+  operation: string;
+  estimatedTimeRemaining?: number;
+}
+
 export default function Home() {
   const [apiKey, setApiKey] = useState('');
   const [projectKey, setProjectKey] = useState('');
@@ -69,6 +78,46 @@ export default function Home() {
   });
   const [filter, setFilter] = useState('all');
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [rememberApiKey, setRememberApiKey] = useState(false);
+  const [progress, setProgress] = useState<ProgressState | null>(null);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [isClient, setIsClient] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'status' | 'lastEvaluated' | 'mismatch'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Mark as client-side after hydration
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Load API key from storage on mount (only on client)
+  useEffect(() => {
+    if (!isClient) return;
+    
+    const loadStoredApiKey = async () => {
+      try {
+        const stored = shouldRememberApiKey();
+        setRememberApiKey(stored);
+        
+        if (stored) {
+          const key = await loadApiKey();
+          if (key) {
+            setApiKey(key);
+            // Auto-fetch projects if API key is loaded
+            setTimeout(() => {
+              handleApiKeyBlur(key);
+            }, 100);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading stored API key:', error);
+      }
+    };
+    
+    loadStoredApiKey();
+  }, [isClient]);
 
   // Validate API key format
   const isValidApiKey = (key: string) => {
@@ -77,8 +126,8 @@ export default function Home() {
   };
 
   // Fetch projects when API key is entered
-  const handleApiKeyBlur = async () => {
-    const trimmedKey = apiKey.trim();
+  const handleApiKeyBlur = async (key?: string) => {
+    const trimmedKey = (key || apiKey).trim();
     if (!trimmedKey) {
       return;
     }
@@ -89,8 +138,26 @@ export default function Home() {
       return;
     }
     
+    // Save API key if remember is checked
+    if (rememberApiKey) {
+      try {
+        await saveApiKey(trimmedKey, true);
+      } catch (error) {
+        console.error('Error saving API key:', error);
+      }
+    } else {
+      clearApiKey();
+    }
+    
+    setLoadingProjects(true);
+    setError('');
+    setProgress({
+      current: 0,
+      total: 1,
+      operation: 'Fetching projects...'
+    });
+    
     try {
-      setError('');
       const response = await fetch('/api/projects', {
         headers: {
           'Authorization': trimmedKey,
@@ -104,10 +171,39 @@ export default function Home() {
       
       const data = await response.json();
       setProjects(data.projects || []);
+      setProgress({
+        current: 1,
+        total: 1,
+        operation: 'Projects loaded'
+      });
+      
+      // Clear progress after a short delay
+      setTimeout(() => {
+        setProgress(null);
+      }, 500);
     } catch (err: any) {
       console.error('Error fetching projects:', err);
       setError(err.message || 'Failed to fetch projects');
       setProjects([]);
+      setProgress(null);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  // Handle remember API key checkbox change
+  const handleRememberChange = async (checked: boolean) => {
+    setRememberApiKey(checked);
+    
+    if (checked && apiKey.trim() && isValidApiKey(apiKey.trim())) {
+      try {
+        await saveApiKey(apiKey.trim(), true);
+      } catch (error) {
+        console.error('Error saving API key:', error);
+        setError('Failed to save API key. Please try again.');
+      }
+    } else {
+      clearApiKey();
     }
   };
 
@@ -135,12 +231,28 @@ export default function Home() {
       return;
     }
     
+    // Save API key if remember is checked
+    if (rememberApiKey) {
+      try {
+        await saveApiKey(apiKey.trim(), true);
+      } catch (error) {
+        console.error('Error saving API key:', error);
+      }
+    }
+    
     setLoading(true);
     setError('');
     setResults([]);
+    setStartTime(Date.now());
     
     try {
       // Step 1: Fetch flag statuses
+      setProgress({
+        current: 0,
+        total: 1,
+        operation: 'Fetching flag statuses...'
+      });
+      
       const statusResponse = await fetch(
         `/api/flag-statuses?projectKey=${encodeURIComponent(projectKey)}&environment=${encodeURIComponent(environment)}`,
         {
@@ -163,7 +275,24 @@ export default function Home() {
         throw new Error('No flags found for this project and environment');
       }
       
-      // Step 2: Fetch flag details in batch
+      // Step 2: Fetch flag details in batch with progress simulation
+      // Since the API processes in batches internally, we simulate progress
+      const fetchStartTime = Date.now();
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - fetchStartTime;
+        // Estimate: ~100ms per flag (conservative estimate)
+        const estimatedTotalTime = flags.length * 100;
+        const estimatedProgress = Math.min(Math.floor((elapsed / estimatedTotalTime) * flags.length), flags.length - 1);
+        const estimatedRemaining = Math.max(0, Math.round((estimatedTotalTime - elapsed) / 1000));
+        
+        setProgress({
+          current: estimatedProgress,
+          total: flags.length,
+          operation: `Fetching flag details... (${estimatedProgress}/${flags.length})`,
+          estimatedTimeRemaining: estimatedRemaining > 0 ? estimatedRemaining : undefined
+        });
+      }, 200); // Update every 200ms
+      
       const detailsResponse = await fetch('/api/flag-details-batch', {
         method: 'POST',
         headers: {
@@ -173,6 +302,8 @@ export default function Home() {
         body: JSON.stringify({ flags })
       });
       
+      clearInterval(progressInterval);
+      
       if (!detailsResponse.ok) {
         throw new Error('Failed to fetch flag details');
       }
@@ -180,7 +311,17 @@ export default function Home() {
       const detailsData = await detailsResponse.json();
       const flagDetails = detailsData.flagDetails || [];
       
-      // Step 3: Calculate summary and set results
+      // Step 3: Analyzing results
+      setProgress({
+        current: flags.length,
+        total: flags.length,
+        operation: 'Analyzing results...'
+      });
+      
+      // Small delay to show the analyzing step
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Calculate summary and set results
       calculateSummary(flags, flagDetails, environment);
       setResults(flagDetails);
       
@@ -189,6 +330,8 @@ export default function Home() {
       setError(err.message || 'An error occurred during health check');
     } finally {
       setLoading(false);
+      setProgress(null);
+      setStartTime(null);
     }
   };
 
@@ -332,19 +475,133 @@ export default function Home() {
     setFilter(filterType);
   };
 
-  // Get filtered results
-  const getFilteredResults = () => {
-    if (filter === 'all') return results;
-    if (filter === 'mismatch') {
-      return results.filter(({ flagStatus, detail, error }) => {
-        const defaultValue = flagStatus.default;
-        const isUnknownDefault = defaultValue === undefined;
-        const prodResult = detail ? getEnvironmentDefaultValue(detail, environment) : { value: 'N/A', error: true };
-        const isFallbackNull = defaultValue === null || defaultValue === undefined || isUnknownDefault;
-        return !isFallbackNull && !prodResult.error && !valuesMatch(defaultValue, prodResult.value);
+  // Get filtered, searched, and sorted results
+  const getFilteredResults = useMemo(() => {
+    let filtered = results;
+    
+    // Apply status/mismatch filter
+    if (filter !== 'all') {
+      if (filter === 'mismatch') {
+        filtered = results.filter(({ flagStatus, detail, error }) => {
+          const defaultValue = flagStatus.default;
+          const isUnknownDefault = defaultValue === undefined;
+          const prodResult = detail ? getEnvironmentDefaultValue(detail, environment) : { value: 'N/A', error: true };
+          const isFallbackNull = defaultValue === null || defaultValue === undefined || isUnknownDefault;
+          return !isFallbackNull && !prodResult.error && !valuesMatch(defaultValue, prodResult.value);
+        });
+      } else {
+        filtered = results.filter(({ flagStatus }) => flagStatus.name === filter);
+      }
+    }
+    
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(({ flagStatus, detail }) => {
+        const flagKey = detail?.key || flagStatus._links?.parent?.href?.split('/').pop() || '';
+        const flagName = detail?.name || 'Unknown Flag';
+        return flagKey.toLowerCase().includes(query) || flagName.toLowerCase().includes(query);
       });
     }
-    return results.filter(({ flagStatus }) => flagStatus.name === filter);
+    
+    // Apply sorting
+    filtered = [...filtered].sort((a, b) => {
+      const aKey = a.detail?.key || a.flagStatus._links?.parent?.href?.split('/').pop() || '';
+      const bKey = b.detail?.key || b.flagStatus._links?.parent?.href?.split('/').pop() || '';
+      const aName = a.detail?.name || 'Unknown Flag';
+      const bName = b.detail?.name || 'Unknown Flag';
+      const aStatus = a.flagStatus.name;
+      const bStatus = b.flagStatus.name;
+      const aLastEval = a.flagStatus.lastRequested ? new Date(a.flagStatus.lastRequested).getTime() : 0;
+      const bLastEval = b.flagStatus.lastRequested ? new Date(b.flagStatus.lastRequested).getTime() : 0;
+      
+      const aHasMismatch = (() => {
+        const defaultValue = a.flagStatus.default;
+        const isUnknownDefault = defaultValue === undefined;
+        const prodResult = a.detail ? getEnvironmentDefaultValue(a.detail, environment) : { value: 'N/A', error: true };
+        const isFallbackNull = defaultValue === null || defaultValue === undefined || isUnknownDefault;
+        return !isFallbackNull && !prodResult.error && !valuesMatch(defaultValue, prodResult.value);
+      })();
+      
+      const bHasMismatch = (() => {
+        const defaultValue = b.flagStatus.default;
+        const isUnknownDefault = defaultValue === undefined;
+        const prodResult = b.detail ? getEnvironmentDefaultValue(b.detail, environment) : { value: 'N/A', error: true };
+        const isFallbackNull = defaultValue === null || defaultValue === undefined || isUnknownDefault;
+        return !isFallbackNull && !prodResult.error && !valuesMatch(defaultValue, prodResult.value);
+      })();
+      
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'name':
+          comparison = aName.localeCompare(bName);
+          break;
+        case 'status':
+          comparison = aStatus.localeCompare(bStatus);
+          break;
+        case 'lastEvaluated':
+          comparison = aLastEval - bLastEval;
+          break;
+        case 'mismatch':
+          comparison = (aHasMismatch ? 1 : 0) - (bHasMismatch ? 1 : 0);
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+    
+    return filtered;
+  }, [results, filter, searchQuery, sortBy, sortOrder, environment]);
+
+  // Export functions
+  const handleExport = (format: 'csv' | 'json' | 'pdf') => {
+    const exportableFlags: ExportableFlag[] = getFilteredResults.map(({ flagStatus, detail, error }) => {
+      const flagKey = detail?.key || flagStatus._links?.parent?.href?.split('/').pop() || 'unknown';
+      const flagName = detail?.name || 'Unknown Flag';
+      const status = flagStatus.name;
+      const defaultValue = flagStatus.default;
+      const isUnknownDefault = defaultValue === undefined;
+      const prodResult = detail ? getEnvironmentDefaultValue(detail, environment) : { value: 'N/A', error: true };
+      const isFallbackNull = defaultValue === null || defaultValue === undefined || isUnknownDefault;
+      const hasMismatch = !isFallbackNull && !prodResult.error && !valuesMatch(defaultValue, prodResult.value);
+      
+      let bcpHealth = 'Unknown';
+      if (isFallbackNull || prodResult.error) {
+        bcpHealth = 'Unable to Determine';
+      } else if (hasMismatch) {
+        bcpHealth = 'Mismatch';
+      } else {
+        bcpHealth = 'Match';
+      }
+      
+      return {
+        flagKey,
+        flagName,
+        status,
+        fallbackValue: String(defaultValue ?? 'unknown'),
+        environmentDefaultValue: String(prodResult.value ?? 'N/A'),
+        bcpHealth,
+        lastEvaluated: flagStatus.lastRequested ? new Date(flagStatus.lastRequested).toLocaleString() : 'Never',
+        hasMismatch,
+        variationName: prodResult.variationName
+      };
+    });
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `ld-flag-health-check-${projectKey}-${environment}-${timestamp}`;
+    
+    switch (format) {
+      case 'csv':
+        exportToCSV(exportableFlags, `${filename}.csv`);
+        break;
+      case 'json':
+        exportToJSON(exportableFlags, `${filename}.json`);
+        break;
+      case 'pdf':
+        exportToPDF(exportableFlags, projectKey, environment, summary, `${filename}.pdf`);
+        break;
+    }
   };
 
   return (
@@ -368,10 +625,31 @@ export default function Home() {
               className={styles.formInput}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              onBlur={handleApiKeyBlur}
+              onBlur={() => handleApiKeyBlur()}
               placeholder="api-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               required
             />
+            <div className={styles.checkboxGroup}>
+              <input
+                type="checkbox"
+                id="rememberApiKey"
+                checked={rememberApiKey}
+                onChange={(e) => handleRememberChange(e.target.checked)}
+                className={styles.checkbox}
+              />
+              <label htmlFor="rememberApiKey" className={styles.checkboxLabel}>
+                Remember API key (stored securely in browser)
+              </label>
+            </div>
+            {rememberApiKey && (
+              <div className={styles.securityWarning}>
+                <span className={styles.warningIcon}>⚠️</span>
+                <span className={styles.warningText}>
+                  API key will be stored in your browser's localStorage with basic encryption. 
+                  Only use this on trusted devices. Clear your browser data to remove stored keys.
+                </span>
+              </div>
+            )}
           </div>
 
           <div className={styles.formRow}>
@@ -428,10 +706,34 @@ export default function Home() {
         </form>
       </div>
 
-      {loading && (
+      {(loading || loadingProjects) && (
         <div className={styles.loadingSection}>
           <div className={styles.spinner}></div>
-          <p>Analyzing flags...</p>
+          {progress ? (
+            <div className={styles.progressContainer}>
+              <p className={styles.progressOperation}>{progress.operation}</p>
+              <div className={styles.progressBarContainer}>
+                <div 
+                  className={styles.progressBar}
+                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                ></div>
+              </div>
+              {progress.total > 1 && (
+                <div className={styles.progressDetails}>
+                  <span className={styles.progressText}>
+                    {progress.current} / {progress.total} {progress.operation.includes('flags') ? 'flags' : 'items'}
+                  </span>
+                  {progress.estimatedTimeRemaining !== undefined && (
+                    <span className={styles.progressTime}>
+                      ~{progress.estimatedTimeRemaining}s remaining
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p>{loadingProjects ? 'Loading projects...' : 'Analyzing flags...'}</p>
+          )}
         </div>
       )}
 
@@ -450,8 +752,76 @@ export default function Home() {
       {results.length > 0 && (
         <div className={styles.resultsSection}>
           <div className={styles.resultsHeader}>
-            <h2 className={styles.resultsHeaderTitle}>Health Check Results</h2>
-            <p className={styles.resultsHeaderDescription}>💡 Click on summary boxes to filter results • Click on flag cards to expand/collapse details</p>
+            <div className={styles.resultsHeaderTop}>
+              <div>
+                <h2 className={styles.resultsHeaderTitle}>Health Check Results</h2>
+                <p className={styles.resultsHeaderDescription}>💡 Click on summary boxes to filter results • Click on flag cards to expand/collapse details</p>
+              </div>
+              <div className={styles.exportButtons}>
+                <button 
+                  className={styles.exportBtn}
+                  onClick={() => handleExport('csv')}
+                  title="Export to CSV"
+                >
+                  📥 CSV
+                </button>
+                <button 
+                  className={styles.exportBtn}
+                  onClick={() => handleExport('json')}
+                  title="Export to JSON"
+                >
+                  📥 JSON
+                </button>
+                <button 
+                  className={styles.exportBtn}
+                  onClick={() => handleExport('pdf')}
+                  title="Export to PDF"
+                >
+                  📥 PDF
+                </button>
+              </div>
+            </div>
+            <div className={styles.searchAndSort}>
+              <div className={styles.searchContainer}>
+                <input
+                  type="text"
+                  className={styles.searchInput}
+                  placeholder="Search flags by name or key..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button
+                    className={styles.clearSearch}
+                    onClick={() => setSearchQuery('')}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div className={styles.sortContainer}>
+                <label htmlFor="sortBy" className={styles.sortLabel}>Sort by:</label>
+                <select
+                  id="sortBy"
+                  className={styles.sortSelect}
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                >
+                  <option value="name">Name</option>
+                  <option value="status">Status</option>
+                  <option value="lastEvaluated">Last Evaluated</option>
+                  <option value="mismatch">Mismatch</option>
+                </select>
+                <button
+                  className={styles.sortOrderBtn}
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
+                >
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
+            </div>
             <div className={styles.summary}>
               <div 
                 className={`${styles.summaryItem} ${styles.summaryAll} ${filter === 'all' ? styles.active : ''}`}
@@ -487,8 +857,13 @@ export default function Home() {
               )}
             </div>
           </div>
+          {getFilteredResults.length === 0 && searchQuery && (
+            <div className={styles.noResults}>
+              <p>No flags found matching "{searchQuery}"</p>
+            </div>
+          )}
           <div className={styles.flagsList}>
-            {getFilteredResults().map(({ flagStatus, detail, error: flagError }, index) => {
+            {getFilteredResults.map(({ flagStatus, detail, error: flagError }, index) => {
               const flagKey = detail?.key || flagStatus._links?.parent?.href?.split('/').pop() || `flag-${index}`;
               const status = flagStatus.name;
               const defaultValue = flagStatus.default;

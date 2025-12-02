@@ -483,3 +483,252 @@
     margin-right: var(--ld-space-4);
 }
 
+/* API Key Storage */
+.checkboxGroup {
+    display: flex;
+    align-items: center;
+    gap: var(--ld-space-2);
+    margin-top: var(--ld-space-3);
+}
+
+.checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--ld-primary);
+}
+
+.checkboxLabel {
+    font-size: 0.875em;
+    color: var(--ld-gray-700);
+    cursor: pointer;
+    user-select: none;
+}
+
+.securityWarning {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ld-space-2);
+    margin-top: var(--ld-space-3);
+    padding: var(--ld-space-3);
+    background: var(--ld-warning-bg);
+    border-left: 3px solid var(--ld-warning);
+    border-radius: var(--ld-radius-md);
+    font-size: 0.8em;
+}
+
+.warningIcon {
+    font-size: 1.1em;
+    flex-shrink: 0;
+}
+
+.warningText {
+    color: var(--ld-gray-700);
+    line-height: 1.5;
+}
+
+/* Progress Indicators */
+.progressContainer {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.progressOperation {
+    text-align: center;
+    color: var(--ld-gray-700);
+    font-size: 0.9em;
+    margin-bottom: var(--ld-space-3);
+    font-weight: 500;
+}
+
+.progressBarContainer {
+    width: 100%;
+    height: 8px;
+    background: var(--ld-gray-200);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: var(--ld-space-2);
+}
+
+.progressBar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ld-primary), var(--ld-primary-hover));
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    animation: progressPulse 2s ease-in-out infinite;
+}
+
+@keyframes progressPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.progressDetails {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85em;
+    color: var(--ld-gray-600);
+}
+
+.progressText {
+    font-weight: 500;
+}
+
+.progressTime {
+    color: var(--ld-gray-500);
+    font-style: italic;
+}
+
+/* Results Header Enhancements */
+.resultsHeaderTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--ld-space-4);
+    gap: var(--ld-space-4);
+}
+
+.exportButtons {
+    display: flex;
+    gap: var(--ld-space-2);
+    flex-shrink: 0;
+}
+
+.exportBtn {
+    padding: var(--ld-space-2) var(--ld-space-3);
+    background: var(--ld-primary);
+    color: white;
+    border: none;
+    border-radius: var(--ld-radius-md);
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--ld-font-family);
+}
+
+.exportBtn:hover {
+    background: var(--ld-primary-hover);
+    box-shadow: var(--ld-shadow-sm);
+}
+
+.exportBtn:active {
+    transform: translateY(1px);
+}
+
+/* Search and Sort */
+.searchAndSort {
+    display: flex;
+    gap: var(--ld-space-4);
+    margin-bottom: var(--ld-space-4);
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.searchContainer {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.searchInput {
+    width: 100%;
+    padding: var(--ld-space-2) var(--ld-space-3);
+    padding-right: 32px;
+    border: 1px solid var(--ld-gray-300);
+    border-radius: var(--ld-radius-md);
+    font-size: 0.875em;
+    font-family: var(--ld-font-family);
+    transition: all 0.2s;
+}
+
+.searchInput:focus {
+    outline: none;
+    border-color: var(--ld-primary);
+    box-shadow: 0 0 0 3px var(--ld-primary-light);
+}
+
+.clearSearch {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ld-gray-500);
+    font-size: 1.2em;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.clearSearch:hover {
+    background: var(--ld-gray-200);
+    color: var(--ld-gray-700);
+}
+
+.sortContainer {
+    display: flex;
+    align-items: center;
+    gap: var(--ld-space-2);
+}
+
+.sortLabel {
+    font-size: 0.875em;
+    color: var(--ld-gray-700);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.sortSelect {
+    padding: var(--ld-space-2) var(--ld-space-3);
+    border: 1px solid var(--ld-gray-300);
+    border-radius: var(--ld-radius-md);
+    font-size: 0.875em;
+    font-family: var(--ld-font-family);
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sortSelect:focus {
+    outline: none;
+    border-color: var(--ld-primary);
+    box-shadow: 0 0 0 3px var(--ld-primary-light);
+}
+
+.sortOrderBtn {
+    padding: var(--ld-space-2) var(--ld-space-3);
+    background: var(--ld-gray-100);
+    border: 1px solid var(--ld-gray-300);
+    border-radius: var(--ld-radius-md);
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 36px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sortOrderBtn:hover {
+    background: var(--ld-gray-200);
+    border-color: var(--ld-gray-400);
+}
+
+.noResults {
+    text-align: center;
+    padding: var(--ld-space-6);
+    color: var(--ld-gray-600);
+    font-size: 0.9em;
+}
+
