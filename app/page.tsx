@@ -800,7 +800,7 @@ export default function Home() {
       {error && (
         <div className={`${styles.errorSection} ${partialResults ? styles.warningSection : ''}`}>
           <div className={styles.errorMessage}>
-            <span className={styles.errorIcon}>{partialResults ? '⚠️' : '⚠️'}</span>
+            <span className={styles.errorIcon}>⚠️</span>
             <div>
               <strong className={styles.errorMessageTitle}>{partialResults ? 'Warning' : 'Error'}</strong>
               <p className={styles.errorMessageText}>{error}</p>
