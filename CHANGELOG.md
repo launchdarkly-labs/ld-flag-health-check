@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-12-02
+
+### Added
+
+- **Rate Limit Tracking & Management**
+  - Real-time rate limit monitoring from LaunchDarkly API response headers
+  - Visual rate limit status bar with color-coded indicators (green/yellow/red)
+  - Displays remaining API calls, reset countdown, and detailed breakdown
+  - Automatic throttling when approaching rate limits (< 10 requests remaining)
+  - Intelligent waiting for rate limit reset windows (10-second LaunchDarkly cycles)
+  
+- **Enhanced Request Handling**
+  - New `fetchWithRateLimit()` wrapper for all API calls
+  - Automatic retry logic with exponential backoff for 429 (Too Many Requests) errors
+  - Network error recovery with up to 3 retry attempts
+  - Comprehensive header extraction and logging for debugging
+  
+- **Batched Request Processing**
+  - Batch processing for flag detail requests (15 flags at a time)
+  - Prevents overwhelming the API with hundreds of simultaneous requests
+  - Progress indicator showing "Fetching flag details: X/Y..."
+  - Configurable delays between batches (100ms default)
+  - Significantly improved reliability for large flag sets (100+ flags)
+  
+- **Improved User Experience**
+  - Live progress updates during flag fetching
+  - Dynamic status messages showing operation progress
+  - Visual feedback on API usage and limits
+  - Pulsing animation for critical rate limit warnings
+
+### Changed
+
+- All API calls now use enhanced `fetchWithRateLimit()` wrapper
+- Flag detail fetching changed from parallel (all at once) to batched processing
+- Loading messages now show dynamic progress and flag counts
+
+### Technical Details
+
+- Tracks LaunchDarkly-specific headers: `X-Ratelimit-Global-Remaining`, `X-Ratelimit-Route-Remaining`, `X-Ratelimit-Reset`
+- Respects LaunchDarkly's 10-second rate limit reset windows
+- Console logging for all rate limit events and retries
+- Fully backward compatible with existing functionality
+
 ## [1.0.0] - 2025-10-31
 
 ### Added

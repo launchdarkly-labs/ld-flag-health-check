@@ -653,4 +653,60 @@ header p {
     margin-right: var(--ld-space-4);
 }
 
+/* Rate Limit Status Bar */
+.rate-limit-status {
+    background: white;
+    padding: var(--ld-space-3) var(--ld-space-5);
+    border-radius: var(--ld-radius-md);
+    box-shadow: var(--ld-shadow-sm);
+    margin-bottom: var(--ld-space-4);
+    display: none;
+    align-items: center;
+    gap: var(--ld-space-4);
+    border: 1.5px solid var(--ld-gray-200);
+    font-size: 0.875em;
+    flex-wrap: wrap;
+}
+
+.rate-limit-status.rate-limit-good {
+    border-color: var(--ld-success);
+    background: var(--ld-success-bg);
+}
+
+.rate-limit-status.rate-limit-warning {
+    border-color: var(--ld-warning);
+    background: var(--ld-warning-bg);
+}
+
+.rate-limit-status.rate-limit-danger {
+    border-color: var(--ld-error);
+    background: var(--ld-error-bg);
+    animation: pulse-warning 2s infinite;
+}
+
+.rate-limit-status.rate-limit-info {
+    border-color: var(--ld-info);
+    background: var(--ld-info-bg);
+}
+
+@keyframes pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+}
+
+.rate-limit-icon {
+    font-size: 1.2em;
+}
+
+.rate-limit-reset {
+    color: var(--ld-gray-600);
+    font-size: 0.85em;
+}
+
+.rate-limit-details {
+    color: var(--ld-gray-500);
+    font-size: 0.8em;
+    margin-left: auto;
+}
+
 

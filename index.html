@@ -13,6 +13,8 @@
             <p>Verify your feature flags are healthy and properly configured</p>
         </header>
 
+        <div id="rateLimitStatus" class="rate-limit-status" style="display: none;"></div>
+
         <div class="config-section">
             <h2>Configuration</h2>
             <form id="healthCheckForm">
@@ -67,7 +69,7 @@
 
         <div id="loadingSection" class="loading-section" style="display: none;">
             <div class="spinner"></div>
-            <p>Analyzing flags...</p>
+            <p id="loadingProgress">Analyzing flags...</p>
         </div>
 
         <div id="errorSection" class="error-section" style="display: none;">

@@ -1,6 +1,156 @@
 // LaunchDarkly API base URL - direct browser calls
 const LD_API_BASE = 'https://app.launchdarkly.com/api/v2';
 
+// Rate Limit Manager - tracks API rate limits
+const RateLimitManager = {
+    globalRemaining: null,
+    routeRemaining: null,
+    resetTime: null,
+    
+    updateFromHeaders(headers) {
+        // Try multiple header name variations (case-insensitive)
+        const globalRemaining = headers.get('X-Ratelimit-Global-Remaining') 
+            || headers.get('x-ratelimit-global-remaining')
+            || headers.get('X-RateLimit-Global-Remaining')
+            || headers.get('RateLimit-Global-Remaining');
+            
+        const routeRemaining = headers.get('X-Ratelimit-Route-Remaining')
+            || headers.get('x-ratelimit-route-remaining')
+            || headers.get('X-RateLimit-Route-Remaining')
+            || headers.get('RateLimit-Route-Remaining');
+            
+        const resetTime = headers.get('X-Ratelimit-Reset')
+            || headers.get('x-ratelimit-reset')
+            || headers.get('X-RateLimit-Reset')
+            || headers.get('RateLimit-Reset');
+        
+        this.globalRemaining = globalRemaining ? parseInt(globalRemaining) : null;
+        this.routeRemaining = routeRemaining ? parseInt(routeRemaining) : null;
+        this.resetTime = resetTime ? parseInt(resetTime) : null;
+        
+        // Update UI
+        this.updateUI();
+    },
+    
+    updateUI() {
+        const container = document.getElementById('rateLimitStatus');
+        if (!container) return;
+        
+        // Check if rate limit data is available
+        const hasRateLimitData = this.globalRemaining !== null || this.routeRemaining !== null;
+        
+        if (!hasRateLimitData) {
+            // Show informational message about CORS limitation
+            if (!this._corsWarningShown) {
+                this._corsWarningShown = true;
+                container.className = 'rate-limit-status rate-limit-info';
+                container.innerHTML = `
+                    <span class="rate-limit-icon">ℹ️</span>
+                    <span>Rate limit headers not accessible from browser (CORS restriction)</span>
+                    <span class="rate-limit-details" style="font-size: 0.75em;">Batching enabled to prevent rate limit issues</span>
+                `;
+                container.style.display = 'flex';
+                
+                // Hide after 10 seconds
+                setTimeout(() => {
+                    container.style.display = 'none';
+                }, 10000);
+            }
+            return;
+        }
+        
+        const lowest = Math.min(
+            this.globalRemaining !== null ? this.globalRemaining : Infinity,
+            this.routeRemaining !== null ? this.routeRemaining : Infinity
+        );
+        
+        if (!isFinite(lowest)) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        const secondsUntilReset = this.resetTime 
+            ? Math.max(0, Math.floor((this.resetTime - Date.now()) / 1000))
+            : 0;
+        
+        // Determine status color
+        let statusClass = 'rate-limit-good';
+        let statusIcon = '✅';
+        if (lowest < 50) {
+            statusClass = 'rate-limit-warning';
+            statusIcon = '⚠️';
+        }
+        if (lowest < 20) {
+            statusClass = 'rate-limit-danger';
+            statusIcon = '🚨';
+        }
+        
+        container.className = `rate-limit-status ${statusClass}`;
+        container.innerHTML = `
+            <span class="rate-limit-icon">${statusIcon}</span>
+            <span>API Calls: <strong>${lowest}</strong> remaining</span>
+            <span class="rate-limit-reset">Resets in ${secondsUntilReset}s</span>
+            <span class="rate-limit-details">(Global: ${this.globalRemaining} | Route: ${this.routeRemaining})</span>
+        `;
+        container.style.display = 'flex';
+    },
+    
+    shouldThrottle() {
+        if (this.globalRemaining === null && this.routeRemaining === null) {
+            return false;
+        }
+        const lowest = Math.min(
+            this.globalRemaining !== null ? this.globalRemaining : Infinity,
+            this.routeRemaining !== null ? this.routeRemaining : Infinity
+        );
+        return isFinite(lowest) && lowest < 10; // Throttle if less than 10 requests remaining
+    },
+    
+    async waitIfNeeded() {
+        if (this.shouldThrottle() && this.resetTime) {
+            const waitTime = Math.max(0, this.resetTime - Date.now() + 100); // Add 100ms buffer
+            if (waitTime > 0 && waitTime < 15000) { // Only wait up to 15 seconds
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+        }
+    }
+};
+
+// Enhanced fetch with rate limit tracking and retry logic
+async function fetchWithRateLimit(url, options, retries = 3) {
+    // Wait if we're close to rate limit
+    await RateLimitManager.waitIfNeeded();
+    
+    try {
+        const response = await fetch(url, options);
+        
+        // Update rate limit info from headers
+        RateLimitManager.updateFromHeaders(response.headers);
+        
+        // Handle 429 Too Many Requests
+        if (response.status === 429) {
+            if (retries > 0) {
+                const retryAfter = response.headers.get('Retry-After') || 2;
+                const waitTime = parseInt(retryAfter) * 1000;
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return fetchWithRateLimit(url, options, retries - 1);
+            } else {
+                throw new Error('Rate limit exceeded. Please wait and try again.');
+            }
+        }
+        
+        return response;
+    } catch (error) {
+        if (retries > 0 && error.name === 'TypeError') {
+            // Network error, retry with exponential backoff
+            const waitTime = (4 - retries) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            return fetchWithRateLimit(url, options, retries - 1);
+        }
+        throw error;
+    }
+}
+
 // DOM Elements
 const form = document.getElementById('healthCheckForm');
 const loadingSection = document.getElementById('loadingSection');
@@ -82,7 +232,7 @@ async function fetchAndPopulateProjects(apiKey) {
         while (hasMore) {
             const url = `${LD_API_BASE}/projects?limit=${limit}&offset=${offset}&expand=environments`;
             
-            const response = await fetch(url, {
+            const response = await fetchWithRateLimit(url, {
                 headers: {
                     'Authorization': apiKey,
                     'Content-Type': 'application/json'
@@ -107,15 +257,6 @@ async function fetchAndPopulateProjects(apiKey) {
         if (projectsData.length === 0) {
             projectKeyInput.placeholder = 'No projects found';
             return;
-        }
-        
-        // Log first project structure to see what we're getting
-        if (projectsData.length > 0) {
-            console.log('Sample project structure:', projectsData[0]);
-            console.log('Has environments?', projectsData[0].environments?.items ? 'Yes' : 'No');
-            if (projectsData[0].environments?.items) {
-                console.log('Environment count:', projectsData[0].environments.items.length);
-            }
         }
         
         // Populate project datalist
@@ -200,7 +341,7 @@ async function runHealthCheck(apiKey, projectKey, environment) {
     
     try {
         // Step 1: Fetch flag statuses directly from LaunchDarkly
-        const statusResponse = await fetch(`${LD_API_BASE}/flag-statuses/${projectKey}/${environment}`, {
+        const statusResponse = await fetchWithRateLimit(`${LD_API_BASE}/flag-statuses/${projectKey}/${environment}`, {
             headers: {
                 'Authorization': apiKey,
                 'Content-Type': 'application/json'
@@ -219,10 +360,18 @@ async function runHealthCheck(apiKey, projectKey, environment) {
             throw new Error('No flags found for this project and environment');
         }
         
-        // Step 2: Fetch details for each flag
-        const flagDetails = await Promise.all(
-            flags.map(flag => fetchFlagDetail(apiKey, flag))
-        );
+        // Update loading message with flag count
+        const loadingProgress = document.getElementById('loadingProgress');
+        if (loadingProgress) {
+            loadingProgress.textContent = `Found ${flags.length} flags. Fetching details...`;
+        }
+        
+        // Step 2: Fetch details for each flag with batching and progress
+        const flagDetails = await fetchFlagDetailsBatched(apiKey, flags, (processed, total) => {
+            if (loadingProgress) {
+                loadingProgress.textContent = `Fetching flag details: ${processed}/${total}...`;
+            }
+        });
         
         // Step 3: Analyze and display results
         displayResults(flags, flagDetails, environment);
@@ -249,7 +398,7 @@ async function fetchFlagDetail(apiKey, flagStatus) {
         // We need to prepend the base URL
         const fullUrl = `https://app.launchdarkly.com${flagUrl}`;
         
-        const response = await fetch(fullUrl, {
+        const response = await fetchWithRateLimit(fullUrl, {
             headers: {
                 'Authorization': apiKey,
                 'Content-Type': 'application/json'
@@ -267,6 +416,32 @@ async function fetchFlagDetail(apiKey, flagStatus) {
         console.error('Error fetching flag detail:', error);
         return { error: error.message, flagStatus };
     }
+}
+
+// Batched flag detail fetching with progress indicator
+async function fetchFlagDetailsBatched(apiKey, flags, onProgress) {
+    const batchSize = 15; // Process 15 flags at a time to avoid overwhelming the API
+    const results = [];
+    
+    for (let i = 0; i < flags.length; i += batchSize) {
+        const batch = flags.slice(i, i + batchSize);
+        const batchPromises = batch.map(flag => fetchFlagDetail(apiKey, flag));
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+        
+        // Update progress
+        const processed = Math.min(i + batchSize, flags.length);
+        if (onProgress) {
+            onProgress(processed, flags.length);
+        }
+        
+        // Small delay between batches to be nice to API (except for last batch)
+        if (i + batchSize < flags.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+    
+    return results;
 }
 
 // Get environment default value from flag detail
